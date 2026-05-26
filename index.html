@@ -166,6 +166,50 @@
       </footer>
     </main>
 
+    <!-- Validation popup -->
+    <div
+      id="validation-popup"
+      class="fixed inset-0 z-50 hidden items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="popup-message"
+      aria-hidden="true"
+    >
+      <div
+        id="popup-backdrop"
+        class="absolute inset-0 bg-slate-900/25 dark:bg-black/45 backdrop-blur-[2px] opacity-0 transition-opacity duration-300"
+        aria-hidden="true"
+      ></div>
+      <div
+        class="validation-modal relative w-full max-w-sm rounded-3xl p-6 sm:p-7 opacity-0 scale-95 transition-all duration-300 ease-tactile"
+        id="popup-panel"
+      >
+        <button
+          type="button"
+          id="popup-close"
+          class="popup-close-btn absolute top-4 right-4"
+          aria-label="Close dialog"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+        <div class="popup-icon-wrap mb-4" aria-hidden="true">⚠️</div>
+        <p
+          id="popup-message"
+          class="font-display text-base sm:text-lg font-semibold text-theme-primary text-center leading-snug pr-6"
+        ></p>
+        <button
+          type="button"
+          id="popup-ok"
+          class="skeuo-btn mt-6 w-full rounded-2xl py-3 font-display font-semibold text-sm sm:text-base"
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+
     <script src="script.js"></script>
   </body>
 </html>

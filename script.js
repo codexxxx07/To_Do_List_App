@@ -31,6 +31,14 @@ const themeToggle = document.getElementById("theme-toggle");
 const themeIcon = document.getElementById("theme-icon");
 const tabIndicator = document.getElementById("tab-indicator");
 const filterTabs = document.querySelectorAll(".filter-tab");
+const validationPopup = document.getElementById("validation-popup");
+const popupBackdrop = document.getElementById("popup-backdrop");
+const popupPanel = document.getElementById("popup-panel");
+const popupMessage = document.getElementById("popup-message");
+const popupCloseBtn = document.getElementById("popup-close");
+const popupOkBtn = document.getElementById("popup-ok");
+
+let popupCloseHandler = null;
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 
@@ -47,6 +55,7 @@ function bindEvents() {
   themeToggle.addEventListener("click", toggleTheme);
   clearCompletedBtn.addEventListener("click", clearCompleted);
   window.addEventListener("resize", updateTabIndicator);
+  initPopup();
 
   filterTabs.forEach((tab) => {
     tab.addEventListener("click", () => setFilter(tab.dataset.filter));
@@ -87,25 +96,104 @@ function toggleTheme() {
   }, 150);
 }
 
+// ─── Validation popup ───────────────────────────────────────────────────────
+
+function initPopup() {
+  popupCloseBtn.addEventListener("click", hidePopup);
+  popupOkBtn.addEventListener("click", hidePopup);
+  popupBackdrop.addEventListener("click", hidePopup);
+}
+
+function validateTaskForm() {
+  const text = taskInput.value.trim();
+  const hasTask = text.length > 0;
+  const hasDate = taskDateInput.value.trim().length > 0;
+
+  if (!hasTask && !hasDate) {
+    return {
+      valid: false,
+      message: "Please enter a task and select a date.",
+      focus: taskInput,
+    };
+  }
+  if (!hasTask) {
+    return {
+      valid: false,
+      message: "Please enter a task before adding.",
+      focus: taskInput,
+    };
+  }
+  if (!hasDate) {
+    return {
+      valid: false,
+      message: "Please select a date for your task.",
+      focus: taskDateInput,
+    };
+  }
+  return { valid: true };
+}
+
+function showPopup(message) {
+  popupMessage.textContent = message;
+  validationPopup.classList.remove("hidden");
+  validationPopup.classList.add("flex");
+  validationPopup.setAttribute("aria-hidden", "false");
+
+  requestAnimationFrame(() => {
+    validationPopup.classList.add("popup-visible");
+  });
+
+  if (popupCloseHandler) {
+    document.removeEventListener("keydown", popupCloseHandler);
+  }
+  popupCloseHandler = (e) => {
+    if (e.key === "Escape") hidePopup();
+  };
+  document.addEventListener("keydown", popupCloseHandler);
+}
+
+function hidePopup() {
+  validationPopup.classList.remove("popup-visible");
+
+  const onHidden = () => {
+    validationPopup.classList.add("hidden");
+    validationPopup.classList.remove("flex");
+    validationPopup.setAttribute("aria-hidden", "true");
+    popupPanel.removeEventListener("transitionend", onHidden);
+  };
+
+  popupPanel.addEventListener("transitionend", onHidden, { once: true });
+
+  if (popupCloseHandler) {
+    document.removeEventListener("keydown", popupCloseHandler);
+    popupCloseHandler = null;
+  }
+}
+
 // ─── Tasks CRUD ─────────────────────────────────────────────────────────────
 
 function handleAddTask(e) {
   e.preventDefault();
-  const text = taskInput.value.trim();
-  if (!text) {
-    taskInput.focus();
-    pulseInput();
+
+  const validation = validateTaskForm();
+  if (!validation.valid) {
+    if (validation.focus) {
+      validation.focus.focus();
+      pulseInput(validation.focus);
+    }
+    showPopup(validation.message);
     return;
   }
 
-  const dueDate = taskDateInput.value.trim() || undefined;
+  const text = taskInput.value.trim();
+  const dueDate = taskDateInput.value.trim();
 
   const task = {
     id: generateId(),
     text,
     completed: false,
     createdAt: Date.now(),
-    ...(dueDate && { dueDate }),
+    dueDate,
   };
 
   tasks.unshift(task);
@@ -118,10 +206,10 @@ function handleAddTask(e) {
   if (firstTile) firstTile.classList.add("animate-slide-in");
 }
 
-function pulseInput() {
-  taskInput.style.transform = "scale(0.98)";
+function pulseInput(el = taskInput) {
+  el.style.transform = "scale(0.98)";
   setTimeout(() => {
-    taskInput.style.transform = "";
+    el.style.transform = "";
   }, 120);
 }
 

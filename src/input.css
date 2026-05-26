@@ -340,6 +340,52 @@
     -webkit-text-fill-color: transparent;
     animation: shimmer 4s ease-in-out infinite;
   }
+
+  .validation-modal {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), 0 20px 40px -12px rgba(100, 120, 150, 0.35);
+  }
+
+  .popup-icon-wrap {
+    @apply w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-2xl;
+    background: var(--surface-raised);
+    box-shadow: var(--tile-shadow);
+  }
+
+  .popup-close-btn {
+    @apply w-9 h-9 rounded-xl flex items-center justify-center;
+    background: var(--surface);
+    box-shadow: 3px 3px 8px rgba(163, 177, 198, 0.4),
+      -2px -2px 6px rgba(255, 255, 255, 0.7);
+    color: var(--text-muted);
+    transition: transform 0.15s ease, color 0.2s ease, box-shadow 0.15s ease;
+  }
+
+  .dark .popup-close-btn {
+    box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.35),
+      -1px -1px 4px rgba(71, 85, 105, 0.15);
+  }
+
+  .popup-close-btn:hover {
+    color: var(--text-primary);
+    transform: scale(1.08);
+  }
+
+  .popup-close-btn:active {
+    transform: scale(0.92);
+    box-shadow: var(--input-inset);
+  }
+
+  #validation-popup.popup-visible #popup-backdrop {
+    @apply opacity-100;
+  }
+
+  #validation-popup.popup-visible #popup-panel {
+    @apply opacity-100 scale-100;
+  }
 }
 
 @layer utilities {
