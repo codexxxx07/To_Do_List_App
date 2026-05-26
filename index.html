@@ -76,9 +76,16 @@
         <input
           type="text"
           id="task-input"
-          class="skeuo-input flex-1 rounded-2xl px-4 py-3.5 text-sm sm:text-base font-medium"
+          class="skeuo-input flex-1 min-w-0 rounded-2xl px-4 py-3.5 text-sm sm:text-base font-medium"
           placeholder="What needs doing?"
           maxlength="200"
+        />
+        <label for="task-date" class="sr-only">Due date (optional)</label>
+        <input
+          type="date"
+          id="task-date"
+          class="skeuo-input skeuo-date shrink-0 w-[9.25rem] sm:w-[10.25rem] rounded-2xl px-2.5 sm:px-3 py-3.5 text-xs sm:text-sm font-medium text-theme-secondary"
+          title="Due date (optional)"
         />
         <button
           type="submit"

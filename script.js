@@ -12,7 +12,7 @@ function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-/** @typedef {{ id: string, text: string, completed: boolean, createdAt: number }} Task */
+/** @typedef {{ id: string, text: string, completed: boolean, createdAt: number, dueDate?: string }} Task */
 
 /** @type {Task[]} */
 let tasks = [];
@@ -22,6 +22,7 @@ let dragSrcId = null;
 // DOM refs
 const taskForm = document.getElementById("task-form");
 const taskInput = document.getElementById("task-input");
+const taskDateInput = document.getElementById("task-date");
 const taskList = document.getElementById("task-list");
 const emptyState = document.getElementById("empty-state");
 const remainingCount = document.getElementById("remaining-count");
@@ -97,16 +98,20 @@ function handleAddTask(e) {
     return;
   }
 
+  const dueDate = taskDateInput.value.trim() || undefined;
+
   const task = {
     id: generateId(),
     text,
     completed: false,
     createdAt: Date.now(),
+    ...(dueDate && { dueDate }),
   };
 
   tasks.unshift(task);
   saveTasks();
   taskInput.value = "";
+  taskDateInput.value = "";
   render();
 
   const firstTile = taskList.querySelector(`[data-id="${task.id}"]`);
@@ -274,6 +279,9 @@ function createTaskElement(task) {
   li.setAttribute("role", "listitem");
 
   const dateStr = formatTimestamp(task.createdAt);
+  const dueDateHtml = task.dueDate
+    ? `<time class="text-xs text-theme-secondary mt-0.5 block" datetime="${task.dueDate}">${escapeHtml(formatDueDate(task.dueDate))}</time>`
+    : "";
 
   li.innerHTML = `
     <span class="drag-handle text-lg select-none" aria-hidden="true" title="Drag to reorder">⠿</span>
@@ -284,6 +292,7 @@ function createTaskElement(task) {
     </button>
     <div class="flex-1 min-w-0">
       <p class="task-text text-sm sm:text-base font-medium text-theme-primary truncate ${task.completed ? "completed" : ""}">${escapeHtml(task.text)}</p>
+      ${dueDateHtml}
       <time class="text-xs text-theme-muted mt-0.5 block" datetime="${new Date(task.createdAt).toISOString()}">${dateStr}</time>
     </div>
     <button type="button" class="delete-btn" aria-label="Delete task" data-action="delete">
@@ -307,6 +316,16 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+function formatDueDate(isoDate) {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const d = new Date(year, month - 1, day);
+  return d.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function formatTimestamp(ts) {
