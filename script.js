@@ -5,6 +5,16 @@
 const STORAGE_KEY = "tasktile-tasks";
 const THEME_KEY = "tasktile-theme";
 
+(function applyThemeBeforePaint() {
+  const theme = localStorage.getItem(THEME_KEY);
+  if (
+    theme === "dark" ||
+    (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches)
+  ) {
+    document.documentElement.classList.add("dark");
+  }
+})();
+
 function generateId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -19,30 +29,50 @@ let tasks = [];
 let currentFilter = "all";
 let dragSrcId = null;
 
-// DOM refs
-const taskForm = document.getElementById("task-form");
-const taskInput = document.getElementById("task-input");
-const taskDateInput = document.getElementById("task-date");
-const taskList = document.getElementById("task-list");
-const emptyState = document.getElementById("empty-state");
-const remainingCount = document.getElementById("remaining-count");
-const clearCompletedBtn = document.getElementById("clear-completed");
-const themeToggle = document.getElementById("theme-toggle");
-const themeIcon = document.getElementById("theme-icon");
-const tabIndicator = document.getElementById("tab-indicator");
-const filterTabs = document.querySelectorAll(".filter-tab");
-const validationPopup = document.getElementById("validation-popup");
-const popupBackdrop = document.getElementById("popup-backdrop");
-const popupPanel = document.getElementById("popup-panel");
-const popupMessage = document.getElementById("popup-message");
-const popupCloseBtn = document.getElementById("popup-close");
-const popupOkBtn = document.getElementById("popup-ok");
+let taskForm;
+let taskInput;
+let taskDateInput;
+let taskList;
+let emptyState;
+let remainingCount;
+let clearCompletedBtn;
+let themeToggle;
+let themeIcon;
+let tabIndicator;
+let filterTabs;
+let validationPopup;
+let popupBackdrop;
+let popupPanel;
+let popupMessage;
+let popupCloseBtn;
+let popupOkBtn;
 
 let popupCloseHandler = null;
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 
+function cacheDomRefs() {
+  taskForm = document.getElementById("task-form");
+  taskInput = document.getElementById("task-input");
+  taskDateInput = document.getElementById("task-date");
+  taskList = document.getElementById("task-list");
+  emptyState = document.getElementById("empty-state");
+  remainingCount = document.getElementById("remaining-count");
+  clearCompletedBtn = document.getElementById("clear-completed");
+  themeToggle = document.getElementById("theme-toggle");
+  themeIcon = document.getElementById("theme-icon");
+  tabIndicator = document.getElementById("tab-indicator");
+  filterTabs = document.querySelectorAll(".filter-tab");
+  validationPopup = document.getElementById("validation-popup");
+  popupBackdrop = document.getElementById("popup-backdrop");
+  popupPanel = document.getElementById("popup-panel");
+  popupMessage = document.getElementById("popup-message");
+  popupCloseBtn = document.getElementById("popup-close");
+  popupOkBtn = document.getElementById("popup-ok");
+}
+
 function init() {
+  cacheDomRefs();
   loadTasks();
   applySavedTheme();
   bindEvents();
@@ -90,9 +120,9 @@ function toggleTheme() {
   const isDark = root.classList.toggle("dark");
   localStorage.setItem(THEME_KEY, isDark ? "dark" : "light");
   themeIcon.textContent = isDark ? "☀️" : "🌙";
-  themeToggle.style.transform = "scale(0.9)";
+  themeToggle.classList.add("is-bumping");
   setTimeout(() => {
-    themeToggle.style.transform = "";
+    themeToggle.classList.remove("is-bumping");
   }, 150);
 }
 
@@ -207,9 +237,9 @@ function handleAddTask(e) {
 }
 
 function pulseInput(el = taskInput) {
-  el.style.transform = "scale(0.98)";
+  el.classList.add("is-pulsing");
   setTimeout(() => {
-    el.style.transform = "";
+    el.classList.remove("is-pulsing");
   }, 120);
 }
 
@@ -295,8 +325,11 @@ function updateTabIndicator() {
   const parent = tabIndicator.parentElement;
   const parentRect = parent.getBoundingClientRect();
   const tabRect = activeTab.getBoundingClientRect();
-  tabIndicator.style.left = `${tabRect.left - parentRect.left}px`;
-  tabIndicator.style.width = `${tabRect.width}px`;
+  tabIndicator.style.setProperty(
+    "--tab-indicator-left",
+    `${tabRect.left - parentRect.left}px`
+  );
+  tabIndicator.style.setProperty("--tab-indicator-width", `${tabRect.width}px`);
 }
 
 function getFilteredTasks() {
@@ -501,4 +534,8 @@ function reorderTasks(srcId, targetId) {
 
 // ─── Start ──────────────────────────────────────────────────────────────────
 
-init();
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}

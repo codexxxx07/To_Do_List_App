@@ -104,6 +104,18 @@
     transition: opacity 0.5s ease;
   }
 
+  .bg-orb-1 {
+    background: var(--orb-1);
+  }
+
+  .bg-orb-2 {
+    background: var(--orb-2);
+  }
+
+  .bg-orb-3 {
+    background: var(--orb-3);
+  }
+
   .glass-card {
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(1.4);
@@ -265,6 +277,8 @@
 
   .tab-indicator {
     @apply absolute top-1 bottom-1 rounded-xl pointer-events-none;
+    left: var(--tab-indicator-left, 0);
+    width: var(--tab-indicator-width, 0);
     background: var(--surface-raised);
     box-shadow: 3px 3px 8px rgba(163, 177, 198, 0.45),
       -2px -2px 6px rgba(255, 255, 255, 0.8);
@@ -291,6 +305,14 @@
   .theme-toggle:active {
     transform: scale(0.94);
     box-shadow: var(--input-inset);
+  }
+
+  .theme-toggle.is-bumping {
+    transform: scale(0.9);
+  }
+
+  .skeuo-input.is-pulsing {
+    transform: scale(0.98);
   }
 
   .ghost-btn {
