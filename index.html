@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A premium skeuomorphic to-do list with drag-and-drop, filters, and dark mode."
+    />
+    <title>To-Do List App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="dest/output.css" />
+    <script>
+      (function () {
+        const theme = localStorage.getItem("tasktile-theme");
+        if (
+          theme === "dark" ||
+          (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches)
+        ) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+  </head>
+  <body class="min-h-dvh flex items-center justify-center p-4 sm:p-8">
+    <!-- Ambient background -->
+    <div class="bg-scene" aria-hidden="true">
+      <div
+        class="bg-orb w-72 h-72 -top-20 -left-20"
+        style="background: var(--orb-1)"
+      ></div>
+      <div
+        class="bg-orb w-96 h-96 top-1/3 -right-32"
+        style="background: var(--orb-2)"
+      ></div>
+      <div
+        class="bg-orb w-64 h-64 bottom-0 left-1/4"
+        style="background: var(--orb-3)"
+      ></div>
+    </div>
+
+    <main
+      class="glass-card w-full max-w-lg rounded-3xl p-6 sm:p-8"
+      role="application"
+      aria-label="To-Do List application"
+    >
+      <!-- Header -->
+      <header class="flex items-start justify-between gap-4 mb-8">
+        <div>
+          <h1 class="font-display text-2xl sm:text-3xl font-bold header-gradient">
+            To-Do List App
+          </h1>
+          <p class="text-theme-secondary text-sm mt-1">
+            Craft your day, one tile at a time
+          </p>
+        </div>
+        <button
+          type="button"
+          id="theme-toggle"
+          class="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle theme"
+        >
+          <span id="theme-icon" aria-hidden="true">🌙</span>
+        </button>
+      </header>
+
+      <!-- Add task -->
+      <form id="task-form" class="flex gap-3 mb-6" autocomplete="off">
+        <label for="task-input" class="sr-only">New task</label>
+        <input
+          type="text"
+          id="task-input"
+          class="skeuo-input flex-1 rounded-2xl px-4 py-3.5 text-sm sm:text-base font-medium"
+          placeholder="What needs doing?"
+          maxlength="200"
+        />
+        <button
+          type="submit"
+          id="add-btn"
+          class="skeuo-btn rounded-2xl px-5 py-3.5 font-display font-semibold text-sm sm:text-base whitespace-nowrap"
+          aria-label="Add task"
+        >
+          Add
+        </button>
+      </form>
+
+      <!-- Filter tabs -->
+      <nav class="filter-tabs mb-5" role="tablist" aria-label="Filter tasks">
+        <div id="tab-indicator" class="tab-indicator" aria-hidden="true"></div>
+        <button
+          type="button"
+          role="tab"
+          class="filter-tab active"
+          data-filter="all"
+          aria-selected="true"
+        >
+          All
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="filter-tab"
+          data-filter="active"
+          aria-selected="false"
+        >
+          Active
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="filter-tab"
+          data-filter="completed"
+          aria-selected="false"
+        >
+          Done
+        </button>
+      </nav>
+
+      <!-- Task list -->
+      <section aria-live="polite" aria-relevant="additions removals">
+        <ul id="task-list" class="space-y-3 min-h-[4rem]"></ul>
+
+        <!-- Empty state -->
+        <div id="empty-state" class="hidden text-center py-12 px-4">
+          <div class="empty-icon-wrap animate-breathe" aria-hidden="true">
+            ✨
+          </div>
+          <h2 class="font-display text-lg font-semibold text-theme-primary mb-2">
+            Your canvas is clear
+          </h2>
+          <p class="text-theme-secondary text-sm max-w-xs mx-auto leading-relaxed">
+            No tasks yet — add something above and watch it slide into place like
+            a physical tile.
+          </p>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer
+        class="flex flex-wrap items-center justify-between gap-3 mt-6 pt-5 border-t border-white/20 dark:border-slate-600/30"
+      >
+        <p id="task-counter" class="text-theme-secondary text-sm font-medium">
+          <span id="remaining-count">0</span> tasks remaining
+        </p>
+        <button
+          type="button"
+          id="clear-completed"
+          class="ghost-btn hidden"
+          aria-label="Clear completed tasks"
+        >
+          Clear completed
+        </button>
+      </footer>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
