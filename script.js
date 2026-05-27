@@ -6,13 +6,8 @@ const STORAGE_KEY = "tasktile-tasks";
 const THEME_KEY = "tasktile-theme";
 
 (function applyThemeBeforePaint() {
-  const theme = localStorage.getItem(THEME_KEY);
-  if (
-    theme === "dark" ||
-    (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches)
-  ) {
-    document.documentElement.classList.add("dark");
-  }
+  // Always start in light mode: ignore any previously stored theme value.
+  document.documentElement.classList.remove("dark");
 })();
 
 function generateId() {
@@ -118,7 +113,6 @@ function applySavedTheme() {
 function toggleTheme() {
   const root = document.documentElement;
   const isDark = root.classList.toggle("dark");
-  localStorage.setItem(THEME_KEY, isDark ? "dark" : "light");
   themeIcon.textContent = isDark ? "☀️" : "🌙";
   themeToggle.classList.add("is-bumping");
   setTimeout(() => {
