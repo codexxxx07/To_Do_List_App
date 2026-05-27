@@ -23,6 +23,7 @@ function generateId() {
 let tasks = [];
 let currentFilter = "all";
 let dragSrcId = null;
+let editingTaskId = null;
 
 let taskForm;
 let taskInput;
@@ -129,29 +130,32 @@ function initPopup() {
 }
 
 function validateTaskForm() {
-  const text = taskInput.value.trim();
+  return validateTaskValues(taskInput.value.trim(), taskDateInput.value.trim(), taskInput, taskDateInput);
+}
+
+function validateTaskValues(text, dueDate, textField, dateField) {
   const hasTask = text.length > 0;
-  const hasDate = taskDateInput.value.trim().length > 0;
+  const hasDate = dueDate.length > 0;
 
   if (!hasTask && !hasDate) {
     return {
       valid: false,
       message: "Please enter a task and select a date.",
-      focus: taskInput,
+      focus: textField,
     };
   }
   if (!hasTask) {
     return {
       valid: false,
       message: "Please enter a task before adding.",
-      focus: taskInput,
+      focus: textField,
     };
   }
   if (!hasDate) {
     return {
       valid: false,
       message: "Please select a date for your task.",
-      focus: taskDateInput,
+      focus: dateField,
     };
   }
   return { valid: true };
@@ -271,6 +275,44 @@ function deleteTask(id) {
     saveTasks();
     render();
   }
+}
+
+function startEditTask(id) {
+  editingTaskId = id;
+  render();
+  requestAnimationFrame(() => {
+    const editInput = taskList.querySelector(`[data-id="${id}"] [data-action="edit-text"]`);
+    editInput?.focus();
+  });
+}
+
+function cancelEditTask() {
+  editingTaskId = null;
+  render();
+}
+
+function saveEditedTask(id, textField, dateField) {
+  const text = textField.value.trim();
+  const dueDate = dateField.value.trim();
+  const validation = validateTaskValues(text, dueDate, textField, dateField);
+
+  if (!validation.valid) {
+    if (validation.focus) {
+      validation.focus.focus();
+      pulseInput(validation.focus);
+    }
+    showPopup(validation.message);
+    return;
+  }
+
+  const task = tasks.find((t) => t.id === id);
+  if (!task) return;
+
+  task.text = text;
+  task.dueDate = dueDate;
+  editingTaskId = null;
+  saveTasks();
+  render();
 }
 
 function clearCompleted() {
@@ -394,6 +436,7 @@ function createTaskElement(task) {
   li.setAttribute("role", "listitem");
 
   const dateStr = formatTimestamp(task.createdAt);
+  const isEditing = editingTaskId === task.id;
   const dueDateHtml = task.dueDate
     ? `<time class="text-xs text-theme-secondary mt-0.5 block" datetime="${task.dueDate}">${escapeHtml(formatDueDate(task.dueDate))}</time>`
     : "";
@@ -405,11 +448,41 @@ function createTaskElement(task) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
       </span>
     </button>
-    <div class="flex-1 min-w-0">
-      <p class="task-text text-sm sm:text-base font-medium text-theme-primary truncate ${task.completed ? "completed" : ""}">${escapeHtml(task.text)}</p>
-      ${dueDateHtml}
-      <time class="text-xs text-theme-muted mt-0.5 block" datetime="${new Date(task.createdAt).toISOString()}">${dateStr}</time>
+    <div class="flex-1 min-w-0 ${isEditing ? "space-y-2" : ""}">
+      ${
+        isEditing
+          ? `
+        <input
+          type="text"
+          data-action="edit-text"
+          class="skeuo-input w-full rounded-xl px-3 py-2.5 text-sm sm:text-base font-medium"
+          maxlength="200"
+          value="${escapeHtml(task.text)}"
+        />
+        <input
+          type="date"
+          data-action="edit-date"
+          class="skeuo-input skeuo-date w-full rounded-xl px-3 py-2.5 text-xs sm:text-sm font-medium text-theme-secondary"
+          value="${task.dueDate || ""}"
+        />
+      `
+          : `
+        <p class="task-text text-sm sm:text-base font-medium text-theme-primary truncate ${task.completed ? "completed" : ""}">${escapeHtml(task.text)}</p>
+        ${dueDateHtml}
+      `
+      }
+      <time class="text-xs text-theme-muted ${isEditing ? "" : "mt-0.5"} block" datetime="${new Date(task.createdAt).toISOString()}">${dateStr}</time>
     </div>
+    ${
+      isEditing
+        ? `
+      <button type="button" class="delete-btn" aria-label="Save task" data-action="save" title="Save">✔</button>
+      <button type="button" class="delete-btn" aria-label="Cancel edit" data-action="cancel" title="Cancel">✖</button>
+    `
+        : `
+      <button type="button" class="delete-btn" aria-label="Edit task" data-action="edit" title="Edit">✏️</button>
+    `
+    }
     <button type="button" class="delete-btn" aria-label="Delete task" data-action="delete">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
     </button>
@@ -421,6 +494,16 @@ function createTaskElement(task) {
   li.querySelector('[data-action="delete"]').addEventListener("click", () =>
     deleteTask(task.id)
   );
+  li.querySelector('[data-action="edit"]')?.addEventListener("click", () =>
+    startEditTask(task.id)
+  );
+  li.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditTask);
+  li.querySelector('[data-action="save"]')?.addEventListener("click", () => {
+    const textField = li.querySelector('[data-action="edit-text"]');
+    const dateField = li.querySelector('[data-action="edit-date"]');
+    if (!textField || !dateField) return;
+    saveEditedTask(task.id, textField, dateField);
+  });
 
   bindDragEvents(li, task.id);
 
