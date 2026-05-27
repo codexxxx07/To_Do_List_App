@@ -4,6 +4,7 @@
 
 const STORAGE_KEY = "tasktile-tasks";
 const THEME_KEY = "tasktile-theme";
+const VALID_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 (function applyThemeBeforePaint() {
   // Always start in light mode: ignore any previously stored theme value.
@@ -24,6 +25,8 @@ let tasks = [];
 let currentFilter = "all";
 let dragSrcId = null;
 let editingTaskId = null;
+let hasInitialized = false;
+let savedTasksSnapshot = "[]";
 
 let taskForm;
 let taskInput;
@@ -68,6 +71,8 @@ function cacheDomRefs() {
 }
 
 function init() {
+  if (hasInitialized) return;
+  hasInitialized = true;
   cacheDomRefs();
   loadTasks();
   applySavedTheme();
@@ -82,6 +87,7 @@ function bindEvents() {
   clearCompletedBtn.addEventListener("click", clearCompleted);
   window.addEventListener("resize", updateTabIndicator);
   initPopup();
+  bindTaskListEvents();
 
   filterTabs.forEach((tab) => {
     tab.addEventListener("click", () => setFilter(tab.dataset.filter));
@@ -93,15 +99,20 @@ function bindEvents() {
 function loadTasks() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    tasks = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(tasks)) tasks = [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    tasks = Array.isArray(parsed) ? parsed.map(sanitizeTask).filter(Boolean) : [];
+    savedTasksSnapshot = JSON.stringify(tasks);
   } catch {
     tasks = [];
+    savedTasksSnapshot = "[]";
   }
 }
 
 function saveTasks() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  const snapshot = JSON.stringify(tasks);
+  if (snapshot === savedTasksSnapshot) return;
+  localStorage.setItem(STORAGE_KEY, snapshot);
+  savedTasksSnapshot = snapshot;
 }
 
 // ─── Theme ──────────────────────────────────────────────────────────────────
@@ -130,7 +141,7 @@ function initPopup() {
 }
 
 function validateTaskForm() {
-  return validateTaskValues(taskInput.value.trim(), taskDateInput.value.trim(), taskInput, taskDateInput);
+  return validateTaskValues(sanitizeTaskText(taskInput.value), sanitizeDueDate(taskDateInput.value), taskInput, taskDateInput);
 }
 
 function validateTaskValues(text, dueDate, textField, dateField) {
@@ -202,6 +213,7 @@ function hidePopup() {
 
 function handleAddTask(e) {
   e.preventDefault();
+  if (editingTaskId) return;
 
   const validation = validateTaskForm();
   if (!validation.valid) {
@@ -213,8 +225,8 @@ function handleAddTask(e) {
     return;
   }
 
-  const text = taskInput.value.trim();
-  const dueDate = taskDateInput.value.trim();
+  const text = sanitizeTaskText(taskInput.value);
+  const dueDate = sanitizeDueDate(taskDateInput.value);
 
   const task = {
     id: generateId(),
@@ -228,10 +240,8 @@ function handleAddTask(e) {
   saveTasks();
   taskInput.value = "";
   taskDateInput.value = "";
-  render();
-
-  const firstTile = taskList.querySelector(`[data-id="${task.id}"]`);
-  if (firstTile) firstTile.classList.add("animate-slide-in");
+  addTaskToDom(task);
+  syncMetaUi();
 }
 
 function pulseInput(el = taskInput) {
@@ -246,40 +256,36 @@ function toggleComplete(id) {
   if (!task) return;
   task.completed = !task.completed;
   saveTasks();
-
-  const el = taskList.querySelector(`[data-id="${id}"]`);
-  if (el) {
-    const check = el.querySelector(".check-toggle");
-    if (check) check.classList.add("animate-check-pop");
-    setTimeout(() => check?.classList.remove("animate-check-pop"), 400);
-  }
-
-  render();
+  patchTaskInDom(id, { animateCheck: true });
+  syncMetaUi();
 }
 
 function deleteTask(id) {
   const el = taskList.querySelector(`[data-id="${id}"]`);
+  const commitDelete = () => {
+    const next = tasks.filter((t) => t.id !== id);
+    if (next.length === tasks.length) return;
+    tasks = next;
+    saveTasks();
+    editingTaskId = editingTaskId === id ? null : editingTaskId;
+    removeTaskElement(id);
+    syncMetaUi();
+  };
+
   if (el) {
     el.classList.add("animate-fade-out");
-    el.addEventListener(
-      "animationend",
-      () => {
-        tasks = tasks.filter((t) => t.id !== id);
-        saveTasks();
-        render();
-      },
-      { once: true }
-    );
+    el.addEventListener("animationend", commitDelete, { once: true });
   } else {
-    tasks = tasks.filter((t) => t.id !== id);
-    saveTasks();
-    render();
+    commitDelete();
   }
 }
 
 function startEditTask(id) {
+  if (editingTaskId && editingTaskId !== id) {
+    patchTaskInDom(editingTaskId);
+  }
   editingTaskId = id;
-  render();
+  patchTaskInDom(id);
   requestAnimationFrame(() => {
     const editInput = taskList.querySelector(`[data-id="${id}"] [data-action="edit-text"]`);
     editInput?.focus();
@@ -287,13 +293,15 @@ function startEditTask(id) {
 }
 
 function cancelEditTask() {
+  if (!editingTaskId) return;
+  const prev = editingTaskId;
   editingTaskId = null;
-  render();
+  patchTaskInDom(prev);
 }
 
 function saveEditedTask(id, textField, dateField) {
-  const text = textField.value.trim();
-  const dueDate = dateField.value.trim();
+  const text = sanitizeTaskText(textField.value);
+  const dueDate = sanitizeDueDate(dateField.value);
   const validation = validateTaskValues(text, dueDate, textField, dateField);
 
   if (!validation.valid) {
@@ -312,30 +320,36 @@ function saveEditedTask(id, textField, dateField) {
   task.dueDate = dueDate;
   editingTaskId = null;
   saveTasks();
-  render();
+  patchTaskInDom(id);
+  syncMetaUi();
 }
 
 function clearCompleted() {
-  const completedEls = taskList.querySelectorAll(".task-tile.completed");
-  if (completedEls.length === 0) {
+  const completedIds = new Set(tasks.filter((t) => t.completed).map((t) => t.id));
+  if (completedIds.size === 0) return;
+
+  const visibleCompletedEls = Array.from(taskList.querySelectorAll(".task-tile.completed"));
+  const commit = () => {
     tasks = tasks.filter((t) => !t.completed);
+    if (editingTaskId && completedIds.has(editingTaskId)) editingTaskId = null;
     saveTasks();
-    render();
+    visibleCompletedEls.forEach((el) => el.remove());
+    syncMetaUi();
+  };
+
+  if (visibleCompletedEls.length === 0) {
+    commit();
     return;
   }
 
   let removed = 0;
-  completedEls.forEach((el) => {
+  visibleCompletedEls.forEach((el) => {
     el.classList.add("animate-fade-out");
     el.addEventListener(
       "animationend",
       () => {
         removed++;
-        if (removed === completedEls.length) {
-          tasks = tasks.filter((t) => !t.completed);
-          saveTasks();
-          render();
-        }
+        if (removed === visibleCompletedEls.length) commit();
       },
       { once: true }
     );
@@ -345,6 +359,7 @@ function clearCompleted() {
 // ─── Filter ─────────────────────────────────────────────────────────────────
 
 function setFilter(filter) {
+  if (!filter || currentFilter === filter) return;
   currentFilter = filter;
   filterTabs.forEach((tab) => {
     const active = tab.dataset.filter === filter;
@@ -382,48 +397,11 @@ function getFilteredTasks() {
 // ─── Render ─────────────────────────────────────────────────────────────────
 
 function render() {
-  const filtered = getFilteredTasks();
-  const activeCount = tasks.filter((t) => !t.completed).length;
-  const completedCount = tasks.filter((t) => t.completed).length;
-
-  remainingCount.textContent = String(activeCount);
-  clearCompletedBtn.classList.toggle("hidden", completedCount === 0);
-
-  const showEmpty = filtered.length === 0;
-  const isGlobalEmpty = tasks.length === 0;
-
-  if (isGlobalEmpty) {
-    emptyState.classList.remove("hidden");
-    emptyState.querySelector("h2").textContent = "Your canvas is clear";
-    emptyState.querySelector("p").textContent =
-      "No tasks yet — add something above and watch it slide into place like a physical tile.";
-    emptyState.querySelector(".empty-icon-wrap").textContent = "✨";
-  } else if (showEmpty) {
-    emptyState.classList.remove("hidden");
-    const messages = {
-      active: {
-        icon: "🎯",
-        title: "All caught up!",
-        desc: "Every task is done. Time to celebrate or add something new.",
-      },
-      completed: {
-        icon: "📭",
-        title: "Nothing completed yet",
-        desc: "Finish a task and it'll land here with a satisfying check.",
-      },
-    };
-    const msg = messages[currentFilter] || messages.active;
-    emptyState.querySelector(".empty-icon-wrap").textContent = msg.icon;
-    emptyState.querySelector("h2").textContent = msg.title;
-    emptyState.querySelector("p").textContent = msg.desc;
-  } else {
-    emptyState.classList.add("hidden");
-  }
-
-  taskList.innerHTML = "";
-  filtered.forEach((task) => {
-    taskList.appendChild(createTaskElement(task));
-  });
+  taskList.textContent = "";
+  const fragment = document.createDocumentFragment();
+  getFilteredTasks().forEach((task) => fragment.appendChild(createTaskElement(task)));
+  taskList.appendChild(fragment);
+  syncMetaUi();
 }
 
 function createTaskElement(task) {
@@ -489,26 +467,6 @@ function createTaskElement(task) {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
     </button>
   `;
-
-  li.querySelector('[data-action="toggle"]').addEventListener("click", () =>
-    toggleComplete(task.id)
-  );
-  li.querySelector('[data-action="delete"]').addEventListener("click", () =>
-    deleteTask(task.id)
-  );
-  li.querySelector('[data-action="edit"]')?.addEventListener("click", () =>
-    startEditTask(task.id)
-  );
-  li.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditTask);
-  li.querySelector('[data-action="save"]')?.addEventListener("click", () => {
-    const textField = li.querySelector('[data-action="edit-text"]');
-    const dateField = li.querySelector('[data-action="edit-date"]');
-    if (!textField || !dateField) return;
-    saveEditedTask(task.id, textField, dateField);
-  });
-
-  bindDragEvents(li, task.id);
-
   return li;
 }
 
@@ -562,44 +520,6 @@ function formatTimestamp(ts) {
 
 // ─── Drag & Drop ────────────────────────────────────────────────────────────
 
-function bindDragEvents(el, id) {
-  el.addEventListener("dragstart", (e) => {
-    dragSrcId = id;
-    el.classList.add("dragging");
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", id);
-    setTimeout(() => el.classList.add("opacity-60"), 0);
-  });
-
-  el.addEventListener("dragend", () => {
-    el.classList.remove("dragging", "opacity-60");
-    dragSrcId = null;
-    taskList.querySelectorAll(".task-tile").forEach((t) =>
-      t.classList.remove("drag-over")
-    );
-  });
-
-  el.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    if (dragSrcId && dragSrcId !== id) {
-      el.classList.add("drag-over");
-    }
-  });
-
-  el.addEventListener("dragleave", () => {
-    el.classList.remove("drag-over");
-  });
-
-  el.addEventListener("drop", (e) => {
-    e.preventDefault();
-    el.classList.remove("drag-over");
-    const srcId = e.dataTransfer.getData("text/plain") || dragSrcId;
-    if (!srcId || srcId === id) return;
-    reorderTasks(srcId, id);
-  });
-}
-
 function reorderTasks(srcId, targetId) {
   const srcIndex = tasks.findIndex((t) => t.id === srcId);
   const targetIndex = tasks.findIndex((t) => t.id === targetId);
@@ -609,6 +529,270 @@ function reorderTasks(srcId, targetId) {
   tasks.splice(targetIndex, 0, moved);
   saveTasks();
   render();
+}
+
+// ─── Delegated list events ──────────────────────────────────────────────────
+
+function bindTaskListEvents() {
+  taskList.addEventListener("click", handleTaskListClick);
+  taskList.addEventListener("keydown", handleTaskListKeydown);
+  taskList.addEventListener("dragstart", handleTaskDragStart);
+  taskList.addEventListener("dragend", handleTaskDragEnd);
+  taskList.addEventListener("dragover", handleTaskDragOver);
+  taskList.addEventListener("dragleave", handleTaskDragLeave);
+  taskList.addEventListener("drop", handleTaskDrop);
+}
+
+function handleTaskListClick(e) {
+  const actionEl = e.target.closest("[data-action]");
+  if (!actionEl || !taskList.contains(actionEl)) return;
+  const tile = actionEl.closest("[data-id]");
+  const id = tile?.dataset.id;
+  if (!id) return;
+
+  const action = actionEl.dataset.action;
+  if (action === "toggle") {
+    toggleComplete(id);
+    return;
+  }
+  if (action === "delete") {
+    deleteTask(id);
+    return;
+  }
+  if (action === "edit") {
+    startEditTask(id);
+    return;
+  }
+  if (action === "cancel") {
+    cancelEditTask();
+    return;
+  }
+  if (action === "save") {
+    const textField = tile.querySelector('[data-action="edit-text"]');
+    const dateField = tile.querySelector('[data-action="edit-date"]');
+    if (!textField || !dateField) return;
+    saveEditedTask(id, textField, dateField);
+  }
+}
+
+function handleTaskListKeydown(e) {
+  const tile = e.target.closest("[data-id]");
+  if (!tile) return;
+  const id = tile.dataset.id;
+  if (!id) return;
+
+  const inEditText = e.target.matches('[data-action="edit-text"]');
+  const inEditDate = e.target.matches('[data-action="edit-date"]');
+  if (!inEditText && !inEditDate) return;
+
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const textField = tile.querySelector('[data-action="edit-text"]');
+    const dateField = tile.querySelector('[data-action="edit-date"]');
+    if (!textField || !dateField) return;
+    saveEditedTask(id, textField, dateField);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    cancelEditTask();
+  }
+}
+
+function handleTaskDragStart(e) {
+  const tile = e.target.closest(".task-tile[data-id]");
+  if (!tile || !taskList.contains(tile)) return;
+
+  dragSrcId = tile.dataset.id || null;
+  tile.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  if (dragSrcId) e.dataTransfer.setData("text/plain", dragSrcId);
+  setTimeout(() => tile.classList.add("opacity-60"), 0);
+}
+
+function handleTaskDragEnd(e) {
+  const tile = e.target.closest(".task-tile[data-id]");
+  if (tile) tile.classList.remove("dragging", "opacity-60");
+  dragSrcId = null;
+  clearDragOverState();
+}
+
+function handleTaskDragOver(e) {
+  const tile = e.target.closest(".task-tile[data-id]");
+  if (!tile || !taskList.contains(tile)) return;
+
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  if (dragSrcId && dragSrcId !== tile.dataset.id) {
+    tile.classList.add("drag-over");
+  }
+}
+
+function handleTaskDragLeave(e) {
+  const tile = e.target.closest(".task-tile[data-id]");
+  if (!tile || !taskList.contains(tile)) return;
+  tile.classList.remove("drag-over");
+}
+
+function handleTaskDrop(e) {
+  const tile = e.target.closest(".task-tile[data-id]");
+  if (!tile || !taskList.contains(tile)) return;
+
+  e.preventDefault();
+  tile.classList.remove("drag-over");
+  const srcId = e.dataTransfer.getData("text/plain") || dragSrcId;
+  const targetId = tile.dataset.id;
+  if (!srcId || !targetId || srcId === targetId) return;
+  reorderTasks(srcId, targetId);
+}
+
+function clearDragOverState() {
+  taskList.querySelectorAll(".task-tile.drag-over").forEach((t) => {
+    t.classList.remove("drag-over");
+  });
+}
+
+// ─── Targeted DOM updates ───────────────────────────────────────────────────
+
+function addTaskToDom(task) {
+  if (!shouldRenderTask(task)) return;
+  const li = createTaskElement(task);
+  taskList.prepend(li);
+  li.classList.add("animate-slide-in");
+}
+
+function removeTaskElement(id) {
+  const el = taskList.querySelector(`[data-id="${id}"]`);
+  if (el) el.remove();
+}
+
+function patchTaskInDom(id, opts = {}) {
+  const task = tasks.find((t) => t.id === id);
+  const existing = taskList.querySelector(`[data-id="${id}"]`);
+
+  if (!task) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  if (!shouldRenderTask(task)) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  const nextEl = createTaskElement(task);
+  if (existing) {
+    existing.replaceWith(nextEl);
+  } else {
+    insertTaskByCurrentOrder(nextEl, id);
+  }
+
+  if (opts.animateCheck) {
+    const check = nextEl.querySelector(".check-toggle");
+    if (check) {
+      check.classList.add("animate-check-pop");
+      setTimeout(() => check.classList.remove("animate-check-pop"), 400);
+    }
+  }
+}
+
+function insertTaskByCurrentOrder(el, id) {
+  const orderedVisibleIds = getFilteredTasks().map((t) => t.id);
+  const currentIndex = orderedVisibleIds.indexOf(id);
+  if (currentIndex <= 0) {
+    taskList.prepend(el);
+    return;
+  }
+
+  const prevVisibleId = orderedVisibleIds[currentIndex - 1];
+  const prevEl = taskList.querySelector(`[data-id="${prevVisibleId}"]`);
+  if (prevEl?.nextSibling) {
+    taskList.insertBefore(el, prevEl.nextSibling);
+  } else {
+    taskList.appendChild(el);
+  }
+}
+
+function shouldRenderTask(task) {
+  if (currentFilter === "active") return !task.completed;
+  if (currentFilter === "completed") return task.completed;
+  return true;
+}
+
+function syncMetaUi() {
+  const activeCount = tasks.filter((t) => !t.completed).length;
+  const completedCount = tasks.length - activeCount;
+  remainingCount.textContent = String(activeCount);
+  clearCompletedBtn.classList.toggle("hidden", completedCount === 0);
+  updateEmptyState(getFilteredTasks().length === 0, tasks.length === 0);
+}
+
+function updateEmptyState(showEmpty, isGlobalEmpty) {
+  if (isGlobalEmpty) {
+    emptyState.classList.remove("hidden");
+    emptyState.querySelector("h2").textContent = "Your canvas is clear";
+    emptyState.querySelector("p").textContent =
+      "No tasks yet — add something above and watch it slide into place like a physical tile.";
+    emptyState.querySelector(".empty-icon-wrap").textContent = "✨";
+    return;
+  }
+
+  if (!showEmpty) {
+    emptyState.classList.add("hidden");
+    return;
+  }
+
+  emptyState.classList.remove("hidden");
+  const messages = {
+    active: {
+      icon: "🎯",
+      title: "All caught up!",
+      desc: "Every task is done. Time to celebrate or add something new.",
+    },
+    completed: {
+      icon: "📭",
+      title: "Nothing completed yet",
+      desc: "Finish a task and it'll land here with a satisfying check.",
+    },
+  };
+  const msg = messages[currentFilter] || messages.active;
+  emptyState.querySelector(".empty-icon-wrap").textContent = msg.icon;
+  emptyState.querySelector("h2").textContent = msg.title;
+  emptyState.querySelector("p").textContent = msg.desc;
+}
+
+// ─── Data sanitization ──────────────────────────────────────────────────────
+
+function sanitizeTaskText(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function sanitizeDueDate(value) {
+  if (typeof value !== "string") return "";
+  const date = value.trim();
+  if (!date || !VALID_DATE_RE.test(date)) return "";
+  const [year, month, day] = date.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  const isValid =
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day;
+  return isValid ? date : "";
+}
+
+function sanitizeTask(rawTask) {
+  if (!rawTask || typeof rawTask !== "object") return null;
+  const text = sanitizeTaskText(rawTask.text);
+  const dueDate = sanitizeDueDate(rawTask.dueDate || "");
+  const createdAt = Number.isFinite(rawTask.createdAt) ? rawTask.createdAt : Date.now();
+  if (!text) return null;
+
+  return {
+    id: typeof rawTask.id === "string" && rawTask.id ? rawTask.id : generateId(),
+    text,
+    completed: Boolean(rawTask.completed),
+    createdAt,
+    dueDate,
+  };
 }
 
 // ─── Start ──────────────────────────────────────────────────────────────────
