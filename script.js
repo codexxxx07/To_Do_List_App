@@ -47,6 +47,10 @@ let popupCloseBtn;
 let popupOkBtn;
 
 let popupCloseHandler = null;
+let saveTimer = null;
+let pendingSave = false;
+const CLICK_THROTTLE_MS = 150;
+const actionThrottleMap = new Map();
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 
@@ -83,15 +87,12 @@ function init() {
 
 function bindEvents() {
   taskForm.addEventListener("submit", handleAddTask);
-  themeToggle.addEventListener("click", toggleTheme);
-  clearCompletedBtn.addEventListener("click", clearCompleted);
+  document.addEventListener("click", handleGlobalClick, { passive: false });
   window.addEventListener("resize", updateTabIndicator);
+  document.addEventListener("visibilitychange", flushPendingSaveOnHidden);
+  window.addEventListener("beforeunload", flushPendingSaveSync);
   initPopup();
   bindTaskListEvents();
-
-  filterTabs.forEach((tab) => {
-    tab.addEventListener("click", () => setFilter(tab.dataset.filter));
-  });
 }
 
 // ─── Storage ──────────────────────────────────────────────────────────────
@@ -109,10 +110,33 @@ function loadTasks() {
 }
 
 function saveTasks() {
+  pendingSave = true;
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    flushPendingSave();
+  }, 120);
+}
+
+function flushPendingSave() {
+  if (!pendingSave) return;
   const snapshot = JSON.stringify(tasks);
-  if (snapshot === savedTasksSnapshot) return;
+  if (snapshot === savedTasksSnapshot) {
+    pendingSave = false;
+    return;
+  }
   localStorage.setItem(STORAGE_KEY, snapshot);
   savedTasksSnapshot = snapshot;
+  pendingSave = false;
+}
+
+function flushPendingSaveOnHidden() {
+  if (document.visibilityState !== "hidden") return;
+  flushPendingSave();
+}
+
+function flushPendingSaveSync() {
+  flushPendingSave();
 }
 
 // ─── Theme ──────────────────────────────────────────────────────────────────
@@ -135,9 +159,7 @@ function toggleTheme() {
 // ─── Validation popup ───────────────────────────────────────────────────────
 
 function initPopup() {
-  popupCloseBtn.addEventListener("click", hidePopup);
-  popupOkBtn.addEventListener("click", hidePopup);
-  popupBackdrop.addEventListener("click", hidePopup);
+  // Click delegation handles popup button interactions.
 }
 
 function validateTaskForm() {
@@ -262,7 +284,10 @@ function toggleComplete(id) {
 
 function deleteTask(id) {
   const el = taskList.querySelector(`[data-id="${id}"]`);
+  let hasCommitted = false;
   const commitDelete = () => {
+    if (hasCommitted) return;
+    hasCommitted = true;
     const next = tasks.filter((t) => t.id !== id);
     if (next.length === tasks.length) return;
     tasks = next;
@@ -275,6 +300,7 @@ function deleteTask(id) {
   if (el) {
     el.classList.add("animate-fade-out");
     el.addEventListener("animationend", commitDelete, { once: true });
+    setTimeout(commitDelete, 380);
   } else {
     commitDelete();
   }
@@ -343,17 +369,24 @@ function clearCompleted() {
   }
 
   let removed = 0;
+  let hasCommitted = false;
+  const safeCommit = () => {
+    if (hasCommitted) return;
+    hasCommitted = true;
+    commit();
+  };
   visibleCompletedEls.forEach((el) => {
     el.classList.add("animate-fade-out");
     el.addEventListener(
       "animationend",
       () => {
         removed++;
-        if (removed === visibleCompletedEls.length) commit();
+        if (removed === visibleCompletedEls.length) safeCommit();
       },
       { once: true }
     );
   });
+  setTimeout(safeCommit, 420);
 }
 
 // ─── Filter ─────────────────────────────────────────────────────────────────
@@ -534,7 +567,6 @@ function reorderTasks(srcId, targetId) {
 // ─── Delegated list events ──────────────────────────────────────────────────
 
 function bindTaskListEvents() {
-  taskList.addEventListener("click", handleTaskListClick);
   taskList.addEventListener("keydown", handleTaskListKeydown);
   taskList.addEventListener("dragstart", handleTaskDragStart);
   taskList.addEventListener("dragend", handleTaskDragEnd);
@@ -543,14 +575,56 @@ function bindTaskListEvents() {
   taskList.addEventListener("drop", handleTaskDrop);
 }
 
-function handleTaskListClick(e) {
-  const actionEl = e.target.closest("[data-action]");
+function handleGlobalClick(e) {
+  const popupDismiss = e.target.closest("#popup-backdrop, #popup-close, #popup-ok");
+  if (popupDismiss) {
+    if (!consumeThrottledClick("popup-close")) return;
+    hidePopup();
+    return;
+  }
+
+  const clickedButton = e.target.closest("button");
+  if (!clickedButton) return;
+
+  if (clickedButton.matches("#theme-toggle")) {
+    if (!consumeThrottledClick("theme-toggle")) return;
+    toggleTheme();
+    return;
+  }
+
+  if (clickedButton.matches("#clear-completed")) {
+    if (!consumeThrottledClick("clear-completed")) return;
+    clearCompleted();
+    return;
+  }
+
+  if (clickedButton.matches(".filter-tab")) {
+    const filter = clickedButton.dataset.filter;
+    if (!filter || !consumeThrottledClick(`filter-${filter}`)) return;
+    setFilter(filter);
+    return;
+  }
+
+  const actionEl = clickedButton.closest("[data-action]");
   if (!actionEl || !taskList.contains(actionEl)) return;
+  handleTaskActionClick(actionEl);
+}
+
+function consumeThrottledClick(actionKey) {
+  const now = performance.now();
+  const last = actionThrottleMap.get(actionKey) ?? -Infinity;
+  if (now - last < CLICK_THROTTLE_MS) return false;
+  actionThrottleMap.set(actionKey, now);
+  return true;
+}
+
+function handleTaskActionClick(actionEl) {
   const tile = actionEl.closest("[data-id]");
   const id = tile?.dataset.id;
   if (!id) return;
 
   const action = actionEl.dataset.action;
+  if (!consumeThrottledClick(`${action}:${id}`)) return;
   if (action === "toggle") {
     toggleComplete(id);
     return;

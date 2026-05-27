@@ -92,6 +92,10 @@
     min-height: 100dvh;
     transition: background 0.5s ease, color 0.4s ease;
   }
+
+  button:active {
+    transform: scale(0.98);
+  }
 }
 
 @layer components {
@@ -242,6 +246,12 @@
       -2px -2px 6px rgba(255, 255, 255, 0.7);
     transition: transform 0.15s ease, box-shadow 0.15s ease, color 0.2s ease;
     color: var(--text-muted);
+  }
+
+  .delete-btn svg,
+  .delete-btn i,
+  .check-toggle svg {
+    pointer-events: none;
   }
 
   .dark .delete-btn {
