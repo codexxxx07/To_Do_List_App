@@ -480,7 +480,9 @@ function createTaskElement(task) {
       <button type="button" class="delete-btn" aria-label="Cancel edit" data-action="cancel" title="Cancel">✖</button>
     `
         : `
-      <button type="button" class="delete-btn" aria-label="Edit task" data-action="edit" title="Edit">✏️</button>
+      <button type="button" class="delete-btn" aria-label="Edit task" data-action="edit" title="Edit">
+        <i class="fa-solid fa-pen"></i>
+      </button>
     `
     }
     <button type="button" class="delete-btn" aria-label="Delete task" data-action="delete">
