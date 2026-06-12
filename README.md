@@ -16,8 +16,6 @@ The application features a unique skeuomorphic design that mimics physical tiles
 |------------|-----------|-----------------|
 | ![Empty State](/assets/Empty.png) | ![Task List](/assets/Active.png) | ![Completed Tasks](/assets/Done.png) |
 
-*Note: Screenshots should be added to the `/screenshots` folder to showcase the application's UI.*
-
 ## ✨ Features
 
 ### Core Functionality
@@ -241,5 +239,4 @@ For questions, suggestions, or contributions, please feel free to reach out or o
 
 ---
 
-**Version:** 1.0.0  
-**Last Updated:** June 2026
+**© 2026 Krish | All Rights Reserved**
