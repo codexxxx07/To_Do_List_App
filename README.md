@@ -14,7 +14,7 @@ The application features a unique skeuomorphic design that mimics physical tiles
 
 | Empty State | Task List | Completed Tasks |
 |------------|-----------|-----------------|
-| ![Empty State](/assets/Empty.png) | ![Task List](/assets/Active.png) | ![Completed Tasks](/assets/Done.png) |
+| ![Empty State](/screenshots/empty-state.png) | ![Task List](/screenshots/task-list.png) | ![Completed Tasks](/screenshots/completed-tasks.png) |
 
 ## ✨ Features
 
