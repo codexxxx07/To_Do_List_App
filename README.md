@@ -14,7 +14,7 @@ The application features a unique skeuomorphic design that mimics physical tiles
 
 | Empty State | Task List | Completed Tasks |
 |------------|-----------|-----------------|
-| ![Empty State](/screenshots/empty-state.png) | ![Task List](/screenshots/task-list.png) | ![Completed Tasks](/screenshots/completed-tasks.png) |
+| ![Empty State](/assets/Empty.png) | ![Task List](/assets/Active.png) | ![Completed Tasks](/assets/Done.png) |
 
 *Note: Screenshots should be added to the `/screenshots` folder to showcase the application's UI.*
 
